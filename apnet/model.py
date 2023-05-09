@@ -197,7 +197,7 @@ class APNet(KerasModelContainer):
               loss_weights=[10,5,5], sequence_time_sec=0.5,
               metric_resolution_sec=1.0, label_list=[],
               shuffle=True, init_last_layer=False,
-              **kwargs_keras_fit):
+              **kwargs_keras_fit): # comment
 
         """
         Specific training function for APNet model

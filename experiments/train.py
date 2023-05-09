@@ -2,12 +2,13 @@ import os
 import argparse
 import sys
 import numpy as np
+from sklearn.metrics import confusion_matrix, f1_score
 
 sys.path.append('../')
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 # Datasets
-from apnet.datasets import MedleySolosDb, GoogleSpeechCommands, ICBHIDataset
+from apnet.datasets import MedleySolosDb, GoogleSpeechCommands, ICBHIDataset, IRMAS
 from dcase_models.data.datasets import UrbanSound8k
 
 # Models
@@ -42,7 +43,8 @@ available_datasets = {
     'UrbanSound8k' :  UrbanSound8k,
     'MedleySolosDb' : MedleySolosDb,
     'GoogleSpeechCommands' : GoogleSpeechCommands,
-    'ICBHIDataset': ICBHIDataset
+    'ICBHIDataset': ICBHIDataset,
+    'IRMAS': IRMAS
 }
 
 def main():
@@ -68,6 +70,8 @@ def main():
 
     parser.add_argument('-fold', '--fold_name', type=str, help='fold name',
                         default='fold1')
+    parser.add_argument('-exp_name', '--exp_name', type=str, help='experiment name',
+                        default='exp')
 
     parser.add_argument(
         '-mp', '--models_path', type=str,
@@ -122,6 +126,19 @@ def main():
     dataset_path = os.path.join(args.dataset_path, params_dataset['dataset_path'])
     dataset = dataset_class(dataset_path)
 
+    # dataset.generate_file_lists()
+    # data_dist = dataset.file_to_class
+    # healthy_ = []
+    # for k in data_dist.keys():
+    #     if data_dist[k] == 0:
+    #         healthy_.append(0)
+    #     else:
+    #         healthy_.append(1)
+    #
+    #
+    # print(sum(healthy_),len(healthy_))
+    # exit()
+
     if args.fold_name not in dataset.fold_list:
         raise AttributeError('Fold not available')
 
@@ -155,50 +172,9 @@ def main():
         shuffle=True, train=True, scaler=None,
         outputs=outputs
     )
-    # X_train, Y_train = data_gen_train.get_data()
-    # print(len(X_train), len(Y_train))
-    # exit()
-    # if args.dataset == 'GoogleSpeechCommands':
-    #     N_train = len(data_gen_train.audio_file_list)
-    #     print('len_data_train', N_train)
-    #     data_gen_train.audio_file_list = data_gen_train.audio_file_list[:int(N_train/10)]
-
-    # # Upsample the train set
-    # n_instances = np.zeros(len(dataset.label_list), dtype=int)
-    # files_by_class = {x: [] for x in range(len(dataset.label_list))}
-    # for j in range(len(data_gen_train.audio_file_list)):
-    #     file_name = data_gen_train.audio_file_list[j]['file_original']
-    #     annotations = dataset.get_annotations(file_name, np.zeros(1,), 0)
-    #     #print(annotations)
-    #     class_ix = np.argmax(annotations)
-    #     n_instances[class_ix] += 1
-    #     files_by_class[class_ix].append(data_gen_train.audio_file_list[j])
-    # print(n_instances)
-    # max_instances = np.amax(n_instances)
-
-    # print(len(data_gen_train.audio_file_list))
-    # for class_ix in range(len(dataset.label_list)):
-    #     if n_instances[class_ix] < max_instances:
-    #         new_instances = max_instances - n_instances[class_ix]
-    #         repetitions = int(new_instances/len(files_by_class[class_ix]))
-    #         print(new_instances, repetitions)
-    #         if repetitions > 1:
-    #             for j in range(repetitions):
-    #                 data_gen_train.audio_file_list.extend(files_by_class[class_ix])
-    #         else:
-    #             data_gen_train.audio_file_list.extend(files_by_class[class_ix][:new_instances])
-    # print(len(data_gen_train.audio_file_list))
-
 
     scaler = Scaler('standard') #normalizer=params_model['normalizer'])
 
-    # print('Fitting scaler ...')
-    # if args.model in ['MLP', 'SB_CNN', 'AttRNNSpeechModel']:
-    #     scaler_outputs = None
-    # else:
-    #     scaler_outputs = Scaler(normalizer=[None, params_model['normalizer'], None])
-    #     scaler_outputs.fit(data_gen_train, inputs=False)
-    #     data_gen_train.set_scaler_outputs(scaler_outputs)
 
     scaler.fit(data_gen_train)
     data_gen_train.set_scaler(scaler)
@@ -226,7 +202,7 @@ def main():
     metrics = ['classification']
 
     # Set paths
-    exp_folder = os.path.join(model_folder, args.fold_name)
+    exp_folder = os.path.join(model_folder, args.exp_name)
     mkdir_if_not_exists(exp_folder, parents=True)
 
     if args.continue_training:
@@ -275,6 +251,23 @@ def main():
         sequence_time_sec=0.5, #params_features['sequence_hop_time'],
         **params_model['train_arguments']
     )
+
+    annotations = []
+    predictions = []
+    for batch_index in range(0, len(data_gen_val)):
+        X_val, Y_val = data_gen_val.get_data_batch(batch_index)
+        n_files = len(X_val)
+        for i in range(n_files):
+            X = X_val[i]
+            Y_predicted = model_container.model.predict(X)
+            if type(Y_predicted) == list:
+                Y_predicted = Y_predicted[0]
+            predictions.append(np.argmax(Y_predicted))
+            annotations.append(np.argmax(Y_val[i]))
+
+    print(len(annotations), sum(annotations), len(predictions), sum(predictions))
+    print(confusion_matrix(annotations, predictions))
+    print('F1 score:', f1_score(annotations, predictions))
 
 
 if __name__ == "__main__":

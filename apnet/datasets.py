@@ -230,7 +230,9 @@ class ICBHIDataset(Dataset):
     def build(self):
         self.audio_path = os.path.join(self.dataset_path, 'audio')
         self.fold_list = ["train", "validate", "test"]
-        self.label_list = ["healthy", "crackles", "wheezes", "both"]
+        # self.label_list = ["healthy", "crackles", "wheezes", "both"]
+        self.label_list = ["healthy", "crackles", "both"]
+        # self.label_list = ["healthy", "symptoms"]
         self.evaluation_mode = 'train-validate-test'
         self.file_lists = {}
 
@@ -252,6 +254,66 @@ class ICBHIDataset(Dataset):
     def get_annotations(self, file_name, features, time_resolution):
         y = np.zeros((len(features), len(self.label_list)))
         class_ix = int(os.path.basename(file_name).split('-')[1][:-4])
+
+        # binary setup
+        # if class_ix != 0:
+        #     class_ix = 1
+        if class_ix == 3:
+            class_ix = 2
+        y[:, class_ix] = 1
+
+        return y
+
+    def download(self, force_download=False):
+        self.set_as_downloaded()
+
+
+class IRMAS(Dataset):
+    """
+    Parameters
+    ----------
+    dataset_path : str
+        Path to the dataset fold. This is the path to the folder where the
+        complete dataset will be downloaded, decompressed and handled.
+        It is expected to use a folder name that represents the dataset
+        unambiguously (e.g. ../datasets/UrbanSound8k).
+
+
+    """
+
+    def __init__(self, dataset_path):
+        super().__init__(dataset_path)
+
+    def build(self):
+        self.audio_path = os.path.join(self.dataset_path, 'audio')
+        self.fold_list = ["test"]
+
+        self.label_list = ["clarinet", "distorted electric guitar", "female singer",
+                           "flute", "piano", "tenor saxophone", "trumpet",
+                           "violin"]
+        self.dict_irmas_medley = {'cla': 0, 'flu': 3, 'gel': 1, 'pia': 4, 'sax': 5, 'tru': 6, 'vio':7, 'voi':2}
+        self.evaluation_mode = 'test'
+        self.file_lists = {}
+
+    def generate_file_lists(self):
+        if len(self.file_lists) > 0:
+            return True
+
+        self.file_lists = {'test': []}
+        self.file_to_class = {}
+
+        for f in self.file_lists.keys():
+            all_files = os.listdir(os.path.join(self.audio_path, f))
+            all_files = [x for x in all_files if '.wav' in x]
+            for track in all_files:
+                class_ix = int(self.dict_irmas_medley[os.path.basename(track).split('_')[0]])
+                audio_p = os.path.join(self.audio_path, f, track)
+                self.file_to_class[audio_p] = class_ix
+                self.file_lists[f].append(audio_p)
+
+    def get_annotations(self, file_name, features, time_resolution):
+        y = np.zeros((len(features), len(self.label_list)))
+        class_ix = int(self.dict_irmas_medley[os.path.basename(file_name).split('_')[0]])
         y[:, class_ix] = 1
 
         return y
